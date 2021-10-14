@@ -15,7 +15,7 @@ from datasets.audioset import AudiosetDataset
 from efficientnet.model import BarlowTwins
 from optmizers.lars import LARS , adjust_learning_rate
 
-from datasets.data_utils import DataUtils
+from datasets.data_utils import collate_fn_padd_2b
 from utils import get_upstream_parser ,AverageMeter
 
 
@@ -94,7 +94,7 @@ def main_worker(gpu, args):
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
         dataset, batch_size=per_device_batch_size, num_workers=args.workers,
-        pin_memory=True, sampler=sampler,collate_fn = DataUtils.collate_fn_padd_2)
+        pin_memory=True, sampler=sampler,collate_fn = collate_fn_padd_2b)
 
     scaler = torch.cuda.amp.GradScaler()
     if args.rank == 0:
