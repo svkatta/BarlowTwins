@@ -15,7 +15,7 @@ from datasets.audioset import AudiosetDataset
 from efficientnet.model import BarlowTwins
 from optmizers.lars import LARS , adjust_learning_rate
 
-
+from datasets.data_utils import DataUtils
 from utils import get_upstream_parser ,AverageMeter
 
 
@@ -24,10 +24,9 @@ def create_dir(directory):
         os.makedirs(directory)
 
 def get_logger(args):
-    create_dir(args.exp_root)
-    create_dir(os.path.join(args.exp_root,'models'))
-    logger = logging.getLogger(__name__)
-    f_handler = logging.FileHandler(os.path.join(args.exp_root,'train.log'))
+    (args.exp_dir / 'checkpoints').mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("default")
+    f_handler = logging.FileHandler(os.path.join(args.exp_dir,'train.log'))
     f_handler.setLevel(logging.INFO)
     # f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     # f_handler.setFormatter(f_format)
@@ -47,12 +46,12 @@ def handle_sigterm(signum, frame):
 
 
 def main_worker(gpu, args):
-    logger = get_logger()
+    logger = get_logger(args)
     args.rank += gpu
     torch.distributed.init_process_group(
         backend='nccl', init_method=args.dist_url,
         world_size=args.world_size, rank=args.rank)
-
+    stats_file=None
     if args.rank == 0:
         args.exp_dir.mkdir(parents=True, exist_ok=True)
         stats_file = open(args.exp_dir / 'stats.txt', 'a', buffering=1)
@@ -95,7 +94,7 @@ def main_worker(gpu, args):
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
         dataset, batch_size=per_device_batch_size, num_workers=args.workers,
-        pin_memory=True, sampler=sampler)
+        pin_memory=True, sampler=sampler,collate_fn = DataUtils.collate_fn_padd_2)
 
     scaler = torch.cuda.amp.GradScaler()
     if args.rank == 0:
@@ -105,7 +104,7 @@ def main_worker(gpu, args):
         loss =train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu,stats_file)
         
         if args.rank == 0:
-            logger.info('Epoch [{0}] ConvNet loss: {1:.3f}'.format(epoch, loss))
+            # logger.info('Epoch [{0}] ConvNet loss: {1:.3f}'.format(epoch, loss))
 
             # save checkpoint            
             torch.save({'epoch': epoch + 1,
@@ -116,34 +115,36 @@ def main_worker(gpu, args):
     
 
 def train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu,stats_file):
-    logger = get_logger()
+    logger = get_logger(args)
     # per epoch stats
     batch_time = AverageMeter()
     losses = AverageMeter()
+    on_diag_losses = AverageMeter()
+    off_diag_losses = AverageMeter()
     data_time = AverageMeter()
     end = time.time()
-    for step, ((y1, y2), _) in enumerate(loader,start=epoch * len(loader)): 
+    for step, (y1, y2) in enumerate(loader,start=epoch * len(loader)): 
         data_time.update(time.time() - end)
-        print(y1.shape)
-        print(y2.shape)
-        exit(0)
+
         y1 = y1.cuda(gpu, non_blocking=True)
         y2 = y2.cuda(gpu, non_blocking=True)
         adjust_learning_rate(args, optimizer, loader, step)
         optimizer.zero_grad()
         with torch.cuda.amp.autocast():
-            loss = model.forward(y1, y2)
+            loss,on_diag,off_diag = model.forward(y1, y2)
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
 
         
         losses.update(loss, y1.size(0))
+        on_diag_losses.update(on_diag,y1.size(0))
+        off_diag_losses.update(off_diag,y1.size(0))
         batch_time.update(time.time() - end)
         end = time.time()
 
         if args.rank == 0:
-            logger.info('Epoch: [{0}][{1}/{2}]\t'
+            print('Epoch: [{0}][{1}/{2}]\t'
                     'Time: {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                     'Data: {data_time.val:.3f} ({data_time.avg:.3f})\t'
                     'Loss: {loss.val:.4f} ({loss.avg:.4f})'
@@ -157,7 +158,8 @@ def train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu,stats_file):
                                 loss=loss.item())
                 print(json.dumps(stats))
                 print(json.dumps(stats), file=stats_file)
-    
+    if args.rank == 0:
+        logger.info('Epoch [{0}] ConvNet loss: {1:.3f} , On Diag loss: {2:.3f} , Off Diag loss: {3:.3f} '.format(epoch, losses.avg,on_diag_losses.avg,off_diag_losses.avg))
     return losses.avg
 
 

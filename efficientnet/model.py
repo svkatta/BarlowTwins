@@ -75,15 +75,14 @@ class BarlowTwins(nn.Module):
         self.bn = nn.BatchNorm1d(8192, affine=False)
 
     def forward(self, y1, y2):
-        z1 = self.projector(self.backbone(y1))
-        z2 = self.projector(self.backbone(y2))
+        z1 = self.backbone(y1)
+        z2 = self.backbone(y2) # BS , 1280 ,1 ,1
 
         z1_flat=z1.flatten(start_dim=1)   # BS x ddim
         z2_flat=z2.flatten(start_dim=1)   # BS x ddim
-
-        z1_normalised = self.bn(z1_flat)
-        z2_normalised = self.bn(z2_flat)
-
+        
+        z1_normalised = self.bn(self.projector(z1_flat))
+        z2_normalised = self.bn(self.projector(z2_flat))
         # empirical cross-correlation matrix
         c = z1_normalised.T @ z2_normalised
 
@@ -94,9 +93,9 @@ class BarlowTwins(nn.Module):
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = self.off_diagonal(c).pow_(2).sum()
         loss = on_diag + self.args.lambd * off_diag
-        return loss
+        return loss , on_diag , off_diag
     
-    def off_diagonal(x):
+    def off_diagonal(self,x):
         # return a flattened view of the off-diagonal elements of a square matrix
         n, m = x.shape
         assert n == m

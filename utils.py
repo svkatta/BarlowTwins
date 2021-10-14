@@ -1,10 +1,20 @@
 import argparse
 from pathlib import Path
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 def get_upstream_parser():
     parser = argparse.ArgumentParser(description='Barlow Twins Training')
-    parser.add_argument('data', type=Path, metavar='DIR',
-                        help='path to dataset')
+    # parser.add_argument('data', type=Path, metavar='DIR',
+    #                     help='path to dataset')
     parser.add_argument('--workers', default=8, type=int, metavar='N',
                         help='number of data loader workers')
     parser.add_argument('--epochs', default=1000, type=int, metavar='N',
@@ -24,8 +34,10 @@ def get_upstream_parser():
     parser.add_argument('--exp-dir',default='./exp/',type=Path,help="experiment root directory")
     parser.add_argument('--checkpoint-file', default=None, type=Path,
                         metavar='DIR', help='path to checkpoint directory')
-    parser.add_argument('--resume', default='./checkpoint/', type=Path,
+    parser.add_argument('--resume', default='./checkpoint/', type=str2bool,
                         metavar='DIR', help='path to checkpoint file')
+    parser.add_argument('--final_pooling_type', default='Max', type=str,
+                        help='valid final pooling types are Avg,Max')
     return parser
     # parser.add_argument('--projector', default='8192-8192-8192', type=str,
     #                     metavar='MLP', help='projector MLP')
