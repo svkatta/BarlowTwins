@@ -1,4 +1,6 @@
 import argparse
+import numpy as np
+import logging
 from pathlib import Path
 
 def str2bool(v):
@@ -42,6 +44,37 @@ def get_upstream_parser():
     # parser.add_argument('--projector', default='8192-8192-8192', type=str,
     #                     metavar='MLP', help='projector MLP')
 
+def get_downstream_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--down_stream_task', default="iemocap", type=str,
+                        help='''down_stream task name one of 
+                        birdsong_freefield1010 , birdsong_warblr ,
+                        speech_commands_v1 , speech_commands_v2
+                        libri_100 , musical_instruments , iemocap , tut_urban , voxceleb1 , musan
+                        ''')
+    parser.add_argument('--batch_size', default=32, type=int,
+                        help='batch size ')
+    parser.add_argument('--epochs', default=30, type=int, metavar='N',
+                        help='number of total epochs to run')
+    parser.add_argument('--resume', default = False, type=str2bool,
+                        help='number of total epochs to run')
+    parser.add_argument('--pretrain_path', default=None, type=Path,
+                        help='Path to Pretrain weights') 
+    parser.add_argument('--freeze_effnet', default=True, type=str2bool,
+                        help='Path to Pretrain weights')  
+    parser.add_argument('--final_pooling_type', default='Avg', type=str,
+                        help='valid final pooling types are Avg,Max')                                                            
+    parser.add_argument('--load_only_efficientNet',default = True,type =str2bool)  
+    parser.add_argument('--tag',default = "pretrain_big",type =str)
+    parser.add_argument('--exp-dir',default='./exp/',type=Path,help="experiment root directory")    
+    parser.add_argument('--lr',default=0.001,type=float,help="experiment root directory")                    
+    return parser
+
+def freeze_effnet(model):
+    logger=logging.getLogger("__main__")
+    logger.info("freezing effnet weights")
+    for param in model.parameters():
+        param.requires_grad = False
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
@@ -59,6 +92,43 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+class Metric(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val):
+        if isinstance(val, (torch.Tensor)):
+            val = val.numpy()
+            self.val = val
+            self.sum += np.sum(val) 
+            self.count += np.size(val)
+        self.avg = self.sum / self.count
+
+def move_to_gpu(gpu,*args):
+    if torch.cuda.is_available():
+        for item in args:
+            item.cuda(gpu)
+
+
+def load_pretrain(path,model,
+                load_only_effnet=False,freeze_effnet=False):
+    logger=logging.getLogger("__main__")
+    logger.info("loading from checkpoint only weights : "+path)
+    checkpoint = torch.load(path)
+    if load_only_effnet :
+        for key in checkpoint['state_dict'].copy():
+            if not key.startswith('backbone'):
+                del checkpoint['state_dict'][key]
+    mod_missing_keys,mod_unexpected_keys   = model.load_state_dict(checkpoint['state_dict'],strict=False)
+    assert mod_missing_keys == ['fc.weight', 'fc.bias'] and mod_unexpected_keys == []
+    return model
 ##------------------------------------------------##
 from PIL import Image, ImageOps, ImageFilter
 from torch import nn, optim
