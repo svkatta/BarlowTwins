@@ -4,7 +4,7 @@ import torch
 # import tensorflow as tf
 import numpy as np
 
-def collate_fn_padd_2b(cls,batch):
+def collate_fn_padd_2b(batch):
     '''
     Padds batch of variable length
     note: it converts things ToTensor manually here since the ToTensor transform
