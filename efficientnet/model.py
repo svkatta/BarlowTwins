@@ -2,21 +2,25 @@
 from efficientnet_pytorch import EfficientNet
 import torch
 from torch import nn
+import torchvision
 
 
 class DownstreamClassifer(nn.Module):
     def __init__(self, no_of_classes =256,final_pooling_type="Avg"):
         super(DownstreamClassifer, self).__init__()
-        self.backbone = EfficientNet.from_name('efficientnet-b0',
-                                                    final_pooling_type=final_pooling_type,
-                                                    include_top = False,
-                                                    in_channels = 1,
-                                                    image_size = None)
-        self.classifier = nn.Linear(1280,no_of_classes)
+        # self.backbone = EfficientNet.from_name('efficientnet-b0',
+        #                                             final_pooling_type=final_pooling_type,
+        #                                             include_top = False,
+        #                                             in_channels = 1,
+        #                                             image_size = None)
+        self.backbone = torchvision.models.resnet34(zero_init_residual=True)
+        self.backbone.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.backbone.fc = torch.nn.Identity()
+        self.classifier = nn.Linear(512,no_of_classes)
 
     def forward(self,batch):
         x = self.backbone(batch)
-        x = x.flatten(start_dim=1) #1280 (already swished)
+        # x = x.flatten(start_dim=1) #1280 (already swished)
         x = self.classifier(x)        
         return x
 
