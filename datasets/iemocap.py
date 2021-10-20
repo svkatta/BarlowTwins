@@ -7,7 +7,7 @@ import os
 
 from datasets.data_utils import DataUtils
 
-class IEMOCAPDataset(Dataset):
+class IEMOCAP(Dataset):
     def __init__(self, type, 
                     transform=None,
                     target_transform=None,

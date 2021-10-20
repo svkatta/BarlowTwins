@@ -12,15 +12,16 @@ from efficientnet.model import  DownstreamClassifer
 from utils import (AverageMeter,Metric,freeze_effnet,get_downstream_parser,load_pretrain)#resume_from_checkpoint, save_to_checkpoint,set_seed
 
 import wandb
-wandb.login()
+# wandb.login()
 os.environ["WANDB_API_KEY"] = "52cfe23f2dcf3b889f99716f771f81c71fd75320"
 os.environ["WANDB_MODE"] = "offline"
 
 def main_worker(gpu, args):
     args.rank += gpu
+    args.ngpus = os.environ["CUDA_VISIBLE_DEVICES"]
     if args.rank==0:
         run = wandb.init(project="tut urban",config=vars(args),
-            name="_".join([args.downstream,args.backbone,args.final_pooling_type,wandb.run.id]))
+            name="_".join([args.down_stream_task,args.backbone,args.final_pooling_type]))
     torch.distributed.init_process_group(
         backend='nccl', init_method=args.dist_url,
         world_size=args.world_size, rank=args.rank)
