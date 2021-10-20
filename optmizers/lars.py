@@ -60,3 +60,6 @@ def adjust_learning_rate(args, optimizer, loader, step):
         lr = base_lr * q + end_lr * (1 - q)
     optimizer.param_groups[0]['lr'] = lr * args.learning_rate_weights
     optimizer.param_groups[1]['lr'] = lr * args.learning_rate_biases
+
+# optimizer = optim.SGD(param_groups, 0, momentum=0.9, weight_decay=args.weight_decay)
+# scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)

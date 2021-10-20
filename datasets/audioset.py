@@ -11,7 +11,7 @@ class AudiosetDataset(Dataset):
                     transform=None,
                     sample_rate=16000):        
         self.feat_root = "/speech/srayan/icassp/kaggle_data/audioset_train/spec/" 
-        annotations_file=os.path.join(self.feat_root,"train_data.csv")    
+        annotations_file=os.path.join("/speech/sandesh/icassp/aaai/datasets/audioset.csv")    
         self.uttr_labels= pd.read_csv(annotations_file)
         self.transform = transform
         self.sample_rate = sample_rate
