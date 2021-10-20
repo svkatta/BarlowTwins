@@ -14,7 +14,7 @@ class LanguageIdentification(Dataset):
     def __init__(self, type ,
                     transform=None,
                     sample_rate=16000):
-        audio_root = "/speech/Databases/Birdsong/lid"#DataUtils.root_dir["language_identification"]
+        audio_root = DataUtils.root_dir["language_identification"]
         if(type == "train"):
             annotations_file = os.path.join(audio_root,"train_data.csv") 
         elif(type=="test"):

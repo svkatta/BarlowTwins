@@ -6,18 +6,21 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn
 import sys
-from datasets.data_utils import DataUtils
+from datasets.data_utils import collate_fn_padd_downstream
 from datasets.dataset import get_dataset
 from efficientnet.model import  DownstreamClassifer
 from utils import (AverageMeter,Metric,freeze_effnet,get_downstream_parser,load_pretrain)#resume_from_checkpoint, save_to_checkpoint,set_seed
 
 import wandb
 wandb.login()
+os.environ["WANDB_API_KEY"] = "52cfe23f2dcf3b889f99716f771f81c71fd75320"
+os.environ["WANDB_MODE"] = "offline"
 
 def main_worker(gpu, args):
     args.rank += gpu
     if args.rank==0:
-        run = wandb.init(project="tut urban", config=vars(args))
+        run = wandb.init(project="tut urban",config=vars(args),
+            name="_".join([args.downstream,args.backbone,args.final_pooling_type,wandb.run.id]))
     torch.distributed.init_process_group(
         backend='nccl', init_method=args.dist_url,
         world_size=args.world_size, rank=args.rank)
@@ -42,17 +45,15 @@ def main_worker(gpu, args):
     train_dataset,test_dataset = get_dataset(args.down_stream_task)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)    
     train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=per_device_batch_size,
-                                                collate_fn = DataUtils.collate_fn_padd_2,
+                                                collate_fn = collate_fn_padd_downstream,
                                                 pin_memory=True,sampler = train_sampler)
-    # ! not required just run things in one gpu else need to take care of reduce operations 
-    # test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
     test_loader = torch.utils.data.DataLoader(test_dataset,batch_size=per_device_batch_size,
-                                                collate_fn = DataUtils.collate_fn_padd_2,
+                                                collate_fn = collate_fn_padd_downstream,
                                                 pin_memory=True)  
 
     # models
-    model = DownstreamClassifer(no_of_classes=train_dataset.no_of_classes,
-                                final_pooling_type=args.final_pooling_type).cuda(gpu)
+    args.no_of_classes= train_dataset.no_of_classes
+    model = DownstreamClassifer(args).cuda(gpu)
     
     # Resume
     start_epoch =0 
@@ -87,17 +88,6 @@ def main_worker(gpu, args):
 
         if args.rank == 0 :
             eval(epoch,model,test_loader,criterion,args,gpu,stats_file)
-            # test_accuracy.append(eval_stats["accuracy"].avg)
-            # print(eval_stats["loss"].avg.numpy())
-            # print(eval_stats["accuracy"].avg)
-            # print(max(test_accuracy))
-            # stats = dict(epoch=epoch,
-            #         Train_loss=train_stats["loss"].avg.cpu().numpy().item(),
-            #         Test_Loss=(eval_stats["loss"].avg).numpy().item(),
-            #         Test_Accuracy =eval_stats["accuracy"].avg,  
-            #         Best_Test_Acc=max(test_accuracy))
-            # print(stats)
-            # print(json.dumps(stats), file=stats_file)
     if args.rank==0:
         run.finish()
 

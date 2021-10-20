@@ -12,7 +12,7 @@ class IEMOCAPDataset(Dataset):
                     transform=None,
                     target_transform=None,
                     sample_rate=16000):        
-        self.feat_root =  "/speech/Databases/Birdsong/IEMOCAP/"
+        self.feat_root =  DataUtils.root_dir["iemocap"]
         if type == "train":
             annotations_file=os.path.join(self.feat_root,"train_data.csv")
         elif type == "test":

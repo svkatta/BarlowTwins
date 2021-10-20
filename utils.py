@@ -17,6 +17,8 @@ def get_upstream_parser():
     parser = argparse.ArgumentParser(description='Barlow Twins Training')
     # parser.add_argument('data', type=Path, metavar='DIR',
     #                     help='path to dataset')
+    parser.add_argument('--backbone', default="resnet34", type=str, metavar='N',
+                        help='backbone architure one of resnet34 resnet50 efficinet')
     parser.add_argument('--workers', default=8, type=int, metavar='N',
                         help='number of data loader workers')
     parser.add_argument('--epochs', default=1000, type=int, metavar='N',
@@ -46,6 +48,8 @@ def get_upstream_parser():
 
 def get_downstream_parser():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--backbone', default="resnet34", type=str, metavar='N',
+                        help='backbone architure one of resnet34 resnet50 efficinet')
     parser.add_argument('--down_stream_task', default="iemocap", type=str,
                         help='''down_stream task name one of 
                         birdsong_freefield1010 , birdsong_warblr ,
