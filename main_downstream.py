@@ -19,12 +19,8 @@ os.environ["WANDB_MODE"] = "offline"
 def main_worker(gpu, args):
     args.rank += gpu
     if args.rank==0:
-        run = wandb.init(project="tut urban",name="my_awesome_run", config=vars(args))
-        # print("_".join([args.downstream,args.backbone,args.final_pooling_type,wandb.run.id]))
-        # # wandb.run.name = str.join([args.downstream,args.backbone,args.final_pooling_type,wandb.run.id])
-        # # wandb.run.save()
-        # # print(wandb.run.name)
-        # print("done")
+        run = wandb.init(project="tut urban",config=vars(args),
+            name="_".join([args.downstream,args.backbone,args.final_pooling_type,wandb.run.id]))
     torch.distributed.init_process_group(
         backend='nccl', init_method=args.dist_url,
         world_size=args.world_size, rank=args.rank)
