@@ -18,7 +18,7 @@ class Libri100(Dataset):
                     transform=None,
                     target_transform=None,
                     sample_rate=16000):
-        self.root_dir =DataUtils.root_dir["Libri100"] 
+        self.root_dir =DataUtils.root_dir["libri_100"] 
         if type == "train":
             annotations_file=os.path.join(self.root_dir,"train_data.csv")
         elif type == "test":

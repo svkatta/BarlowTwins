@@ -12,10 +12,17 @@ from datasets.data_utils import DataUtils
 # test  total : 158539
 
 class SpeechCommandsV1(Dataset):
-    def __init__(self, annotations_file="/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/SpeechCommandsV1/train/train_data.csv",
+    def __init__(self,type,
                     transform=None,
                     target_transform=None,
                     sample_rate=16000):
+        self.root_dir = DataUtils.root_dir["speech_commands_v1"]
+        if type == "train" :
+            annotations_file=os.path.join(self.root_dir,"train_data.csv")
+        elif type == "test":
+            annotations_file=os.path.join(self.root_dir,"test_data.csv")    
+        else:
+            raise NotImplementedError
         self.uttr_df= pd.read_csv(annotations_file)
         self.transform = transform
         self.sample_rate = sample_rate
@@ -37,7 +44,8 @@ class SpeechCommandsV1(Dataset):
         return label_id 
 
     def __getitem__(self, idx):
-        audio_path,label = self.uttr_df.iloc[idx,:]
-        uttr_melspec = np.load(audio_path+'.npy')
+        row = self.uttr_df.iloc[idx,:]
+        uttr_path =os.path.join(self.root_dir,row['Path'])
+        uttr_melspec = np.load(uttr_path)
+        label = row['Label']
         return uttr_melspec, self.get_label_id(label)
-

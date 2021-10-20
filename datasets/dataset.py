@@ -1,17 +1,17 @@
 from datasets.language_identification import LanguageIdentification
 from datasets.voxceleb import Voxceleb1
-from datasets.birdsong_dataset import BirdSongDataset 
+from datasets.birdsong_dataset import BirdSong
 from datasets.libri100 import Libri100 
 from datasets.tut_urban_sounds import TutUrbanSounds 
 from datasets.musical_instruments import MusicalInstruments
-from datasets.iemocap import IEMOCAPDataset 
+from datasets.iemocap import IEMOCAP 
 from datasets.speech_commands_v1 import SpeechCommandsV1 
 from datasets.speech_commands_v2 import SpeechCommandsV2 
 import torch
 
 def get_dataset(downstream_task_name):
     if downstream_task_name == "birdsong_combined":
-        return split_dataset(BirdSongDataset(type="combined"))         
+        return split_dataset(BirdSong(type="combined"))         
     elif downstream_task_name == "speech_commands_v1":
         return SpeechCommandsV1(type="train") , SpeechCommandsV1(type="test")
     elif downstream_task_name == "speech_commands_v2":
@@ -21,7 +21,7 @@ def get_dataset(downstream_task_name):
     elif downstream_task_name == "musical_instruments":
         return MusicalInstruments(type="train") , MusicalInstruments(type="test")
     elif downstream_task_name == "iemocap":
-        return IEMOCAPDataset(type='train'),IEMOCAPDataset(type='test')            
+        return IEMOCAP(type='train'),IEMOCAP(type='test')            
     elif downstream_task_name == "tut_urban": 
         return TutUrbanSounds(type="train"),TutUrbanSounds(type="test")    
     elif downstream_task_name == "voxceleb_v1":

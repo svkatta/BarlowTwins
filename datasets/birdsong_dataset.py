@@ -7,7 +7,7 @@ import os
 
 from datasets.data_utils import DataUtils
 
-class BirdSongDataset(Dataset):
+class BirdSong(Dataset):
     def __init__(self, 
                     type, 
                     transform=None,

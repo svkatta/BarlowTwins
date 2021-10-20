@@ -15,7 +15,7 @@ class TutUrbanSounds(Dataset):
                     transform=None,
                     target_transform=None,
                     sample_rate=16000):
-        audio_root = "/speech/Databases/Birdsong/TutUrban/TUT-urban-acoustic-scenes-2018-development/"#DataUtils.root_dir["tut_urban"]
+        audio_root = DataUtils.root_dir["tut_urban"]
         if(type == "train"):
             annotations_file = os.path.join(audio_root,"train_data.csv") 
         elif(type=="test"):

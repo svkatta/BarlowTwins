@@ -39,11 +39,14 @@ class DataUtils():
 
     root_dir ={
         "Birdsong" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/birdsong",
-        "IEMOCAP" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/iemocap/",
+        "iemocap" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/iemocap/",
         "MusicalInstruments" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/magenta",
         "tut_urban" : "/speech/Databases/Birdsong/TutUrban/TUT-urban-acoustic-scenes-2018-development",
         "voxceleb_v1" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/voxceleb/",
-        "language_identification" :"/speech/Databases/Birdsong/lid"
+        "language_identification" :"/speech/Databases/Birdsong/lid",
+        "libri_100" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/libri100",
+        "speech_commands_v1" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/SpeechCommandsV1",
+        "speech_commands_v2" : "/nlsasfs/home/nltm-pilot/sandeshk/icassp/data/SpeechCommandsV2"
     }
 
 #-------------Transforms Audio and Spectrogram-----------------
