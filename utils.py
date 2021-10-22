@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import logging
 from pathlib import Path
+from collections import OrderedDict
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -23,7 +24,7 @@ def get_upstream_parser():
                         help='number of data loader workers')
     parser.add_argument('--epochs', default=1000, type=int, metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('--batch-size', default=2048, type=int, metavar='N',
+    parser.add_argument('--batch_size', default=2048, type=int, metavar='N',
                         help='mini-batch size')
     parser.add_argument('--learning-rate-weights', default=0.2, type=float, metavar='LR',
                         help='base learning rate for weights')
@@ -38,9 +39,11 @@ def get_upstream_parser():
     parser.add_argument('--exp-dir',default='./exp/',type=Path,help="experiment root directory")
     parser.add_argument('--checkpoint-file', default=None, type=Path,
                         metavar='DIR', help='path to checkpoint directory')
-    parser.add_argument('--resume', default='./checkpoint/', type=str2bool,
+    parser.add_argument('--resume', default='false', type=str2bool,
                         metavar='DIR', help='path to checkpoint file')
     parser.add_argument('--final_pooling_type', default='Max', type=str,
+                        help='valid final pooling types are Avg,Max')
+    parser.add_argument('--tag', default='test', type=str,
                         help='valid final pooling types are Avg,Max')
     return parser
     # parser.add_argument('--projector', default='8192-8192-8192', type=str,
@@ -75,9 +78,8 @@ def get_downstream_parser():
     return parser
 
 def freeze_effnet(model):
-    logger=logging.getLogger("__main__")
-    logger.info("freezing effnet weights")
-    for param in model.parameters():
+    print("freezing backbone weights")
+    for param in model.backbone.parameters():
         param.requires_grad = False
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -121,17 +123,25 @@ def move_to_gpu(gpu,*args):
             item.cuda(gpu)
 
 
-def load_pretrain(path,model,
-                load_only_effnet=False,freeze_effnet=False):
-    logger=logging.getLogger("__main__")
-    logger.info("loading from checkpoint only weights : "+path)
-    checkpoint = torch.load(path)
-    if load_only_effnet :
-        for key in checkpoint['state_dict'].copy():
-            if not key.startswith('backbone'):
-                del checkpoint['state_dict'][key]
-    mod_missing_keys,mod_unexpected_keys   = model.load_state_dict(checkpoint['state_dict'],strict=False)
-    assert mod_missing_keys == ['fc.weight', 'fc.bias'] and mod_unexpected_keys == []
+def load_pretrain(path,model,load_only_effnet=False):    
+
+    print("loading from checkpoint only weights : "+path)
+    checkpoint = torch.load(path,map_location=torch.device('cpu'))
+    new_state_dict = OrderedDict()
+    for k, v in checkpoint['model'].items():
+        name = k[7:] # remove `module.`
+        new_state_dict[name] = v
+    for key in new_state_dict.copy():
+        if not key.startswith('backbone'):
+            del new_state_dict[key]
+    mod_missing_keys,mod_unexpected_keys   = model.load_state_dict(new_state_dict,strict=False)
+    
+    # if load_only_effnet :
+    #     for key in checkpoint['model'].copy():
+    #         if not key.startswith('backbone'):
+    #             del checkpoint['model'][key]
+    # mod_missing_keys,mod_unexpected_keys   = model.load_state_dict(checkpoint['model'],strict=False)
+    assert mod_missing_keys == ['classifier.weight', 'classifier.bias'] and mod_unexpected_keys == []
     return model
 ##------------------------------------------------##
 from PIL import Image, ImageOps, ImageFilter

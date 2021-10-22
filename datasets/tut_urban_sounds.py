@@ -38,6 +38,6 @@ class TutUrbanSounds(Dataset):
         row = self.uttr_labels.iloc[idx,:]
         uttr_path = os.path.join(self.audio_root,row['Path'])
         uttr_melspec = np.load(uttr_path)
-        label = row['Label']
-        return uttr_melspec, self.labels_dict[label]
+        label = row['Label_id']
+        return uttr_melspec, label
 

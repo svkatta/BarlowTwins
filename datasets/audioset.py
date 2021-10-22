@@ -6,12 +6,14 @@ import numpy as np
 import os
 from datasets.specaugment import specaug
 
-class AudiosetDataset(Dataset):
+from datasets.data_utils import DataUtils 
+
+class AudiosetDataset20k(Dataset):
     def __init__(self, 
                     transform=None,
                     sample_rate=16000):        
-        self.feat_root = "/speech/srayan/icassp/kaggle_data/audioset_train/spec/" 
-        annotations_file=os.path.join("/speech/sandesh/icassp/aaai/datasets/audioset.csv")    
+        self.feat_root = DataUtils.root_dir["Audioset20k"] 
+        annotations_file=os.path.join(self.feat_root,"audioset.csv")    
         self.uttr_labels= pd.read_csv(annotations_file)
         self.transform = transform
         self.sample_rate = sample_rate

@@ -34,8 +34,9 @@ class MusicalInstruments(Dataset):
         return len(self.uttr_labels)
 
     def __getitem__(self, idx):
-        path,label = self.uttr_labels.iloc[idx,:]
-        uttr_path = os.path.join(self.feat_root,path)
+        row = self.uttr_labels.iloc[idx,:]
+        uttr_path =os.path.join(self.root_dir,row['Path'])
         uttr_melspec = np.load(uttr_path)
+        label = row['Label_id']
         return uttr_melspec, label
 

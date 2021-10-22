@@ -1,24 +1,28 @@
 import json
+import logging
 import math
 import os
-import logging
 import signal
+import socketserver
 import subprocess
 import sys
 import time
-import wandb
-wandb.login()
 
-from torch import nn
 import torch
 import torchvision
-from datasets.audioset import AudiosetDataset
+from torch import nn
+
+from datasets.audioset import AudiosetDataset20k
+from datasets.data_utils import collate_fn_padd_upstream
 from efficientnet.model import BarlowTwins
-from optmizers.lars import LARS , adjust_learning_rate
+from optmizers.lars import LARS, adjust_learning_rate
+from utils import AverageMeter, get_upstream_parser
 
-from datasets.data_utils import collate_fn_padd_2b
-from utils import get_upstream_parser ,AverageMeter
-
+# ! enable for online sync only
+import wandb
+# wandb.login()
+os.environ["WANDB_API_KEY"] = "52cfe23f2dcf3b889f99716f771f81c71fd75320"
+os.environ["WANDB_MODE"] = "offline"
 
 def handle_sigusr1(signum, frame):
     os.system(f'scontrol requeue {os.getenv("SLURM_JOB_ID")}')
@@ -33,16 +37,15 @@ def handle_sigterm(signum, frame):
 def main_worker(gpu, args):
     args.rank += gpu
     if args.rank==0:
-        run = wandb.init(project="pytorch-demo", config=vars(args))
+        run = wandb.init(project="barlowtwins-upstream", config=vars(args))
     torch.distributed.init_process_group(
         backend='nccl', init_method=args.dist_url,
         world_size=args.world_size, rank=args.rank)
-    stats_file=None
     if args.rank == 0:
+        args.exp_dir = args.exp_dir / args.tag
+        (args.exp_dir / 'checkpoints').mkdir(parents=True, exist_ok=True)
         args.exp_dir.mkdir(parents=True, exist_ok=True)
-        stats_file = open(args.exp_dir / 'stats.txt', 'a', buffering=1)
-        print(' '.join(sys.argv))
-        print(' '.join(sys.argv), file=stats_file)
+
 
     torch.cuda.set_device(gpu)
     torch.backends.cudnn.benchmark = True
@@ -74,13 +77,13 @@ def main_worker(gpu, args):
         start_epoch = 0
 
     
-    dataset = AudiosetDataset() # ! rewrite this 
+    dataset = AudiosetDataset20k() # ! rewrite this 
     sampler = torch.utils.data.distributed.DistributedSampler(dataset)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
         dataset, batch_size=per_device_batch_size, num_workers=args.workers,
-        pin_memory=True, sampler=sampler,collate_fn = collate_fn_padd_2b)
+        pin_memory=True, sampler=sampler,collate_fn = collate_fn_padd_upstream)
 
     scaler = torch.cuda.amp.GradScaler()
     if args.rank == 0:
@@ -88,18 +91,17 @@ def main_worker(gpu, args):
         wandb.watch(model, log="all", log_freq=10)
     for epoch in range(start_epoch, args.epochs):
         sampler.set_epoch(epoch)
-        train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu,stats_file)
-        
-        # if args.rank == 0:
-            # save checkpoint            
-            # torch.save({'epoch': epoch + 1,
-            #             'model': model.state_dict(),
-            #             'optimizer' : optimizer.state_dict()},
-            #         args.exp_dir / 'checkpoints' / ('checkpoint_' + str(epoch + 1)  + '.pth'))
+        train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu)
+        print("done" , epoch)
+        if args.rank == 0:
+            torch.save({'epoch': epoch + 1,
+                        'model': model.state_dict(),
+                        'optimizer' : optimizer.state_dict()},
+                    args.exp_dir / 'checkpoints' / ('checkpoint_' + str(epoch + 1)  + '.pth'))
     if args.rank==0:
         run.finish()
 
-def train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu,stats_file):
+def train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu):
     # per epoch stats
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -143,7 +145,6 @@ def train_one_epoch(epoch,model,optimizer,loader,scaler,args,gpu,stats_file):
     if args.rank == 0:
         wandb.log({"loss_epoch":losses.avg , "on_diag_loss": on_diag_losses.avg,
                     "off_diag_loss" : off_diag_losses.avg },step=(epoch+1)*len(loader))
-    return losses.avg
 
 
 
@@ -154,7 +155,10 @@ def main():
     
     # single-node distributed training
     args.rank = 0
-    args.dist_url = 'tcp://localhost:58362'
+    with socketserver.TCPServer(("localhost", 0), None) as s:
+        free_port = s.server_address[1]
+    args.dist_url = 'tcp://localhost:'+str(free_port)
+    print(args.dist_url)
     args.world_size = args.ngpus_per_node
     torch.multiprocessing.spawn(main_worker, (args,), args.ngpus_per_node)
 

@@ -47,5 +47,5 @@ class SpeechCommandsV1(Dataset):
         row = self.uttr_df.iloc[idx,:]
         uttr_path =os.path.join(self.root_dir,row['Path'])
         uttr_melspec = np.load(uttr_path)
-        label = row['Label']
-        return uttr_melspec, self.get_label_id(label)
+        label = row['Label_id']
+        return uttr_melspec, label

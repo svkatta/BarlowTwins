@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import os
 
-from datasets.data_utils import DataUtils
+from datasets.data_utils import DataUtils ,BaseDownstream
 
 class IEMOCAP(Dataset):
     def __init__(self, type, 
@@ -33,6 +33,6 @@ class IEMOCAP(Dataset):
         row = self.uttr_labels.iloc[idx,:]
         uttr_path =os.path.join(self.feat_root,row['Path'])
         uttr_melspec = np.load(uttr_path)
-        label = row['Label']
-        return uttr_melspec, self.labels_dict[label]
+        label = row['Label_id']
+        return uttr_melspec, label
 
