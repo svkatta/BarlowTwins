@@ -29,8 +29,7 @@ class Libri100(Dataset):
         self.transform = transform
         self.sample_rate = sample_rate
         self.train_labels = pd.read_csv(os.path.join(self.root_dir,"train_data.csv"))
-        self.labels_dict = DataUtils.map_labels(self.train_labels['Label'].to_numpy())
-        self.no_of_classes= len(self.labels_dict)
+        self.no_of_classes= len(self.uttr_labels.Label.unique())
 
     def __len__(self):
         return len(self.uttr_labels)
@@ -39,5 +38,5 @@ class Libri100(Dataset):
         row = self.uttr_labels.iloc[idx,:]
         uttr_path =os.path.join(self.root_dir,row['Path'])
         uttr_melspec = np.load(uttr_path)
-        label = row['Label']
-        return uttr_melspec, self.labels_dict[label]
+        label = row['Label_id']
+        return uttr_melspec, label

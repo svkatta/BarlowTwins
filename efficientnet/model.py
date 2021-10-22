@@ -52,21 +52,57 @@ class DownstreamClassifer(nn.Module):
 class BarlowTwins(nn.Module):
 
     def __init__(self, args):
-        super().__init__()
+        super(BarlowTwins, self).__init__()
         self.args = args
-        self.backbone = EfficientNet.from_name('efficientnet-b0',
-                                                    final_pooling_type=args.final_pooling_type,
-                                                    include_top = False,
-                                                    in_channels = 1,
-                                                    image_size = None) # (,)==> (1280)
-        
-
-        # projector
-        self.projector = nn.Sequential(nn.Dropout(0.5),
+        if args.backbone == "efficientnet":
+            self.backbone = EfficientNet.from_name('efficientnet-b0',
+                                                        final_pooling_type=args.final_pooling_type,
+                                                        include_top = False,
+                                                        in_channels = 1,
+                                                        image_size = None)
+            # projector
+            self.projector = nn.Sequential(nn.Dropout(0.5),
                                         nn.Linear(1280, 8192, bias=False),
                                         nn.BatchNorm1d(8192),
                                         nn.ReLU(),
                                         nn.Linear(8192, 8192, bias = False))
+        elif args.backbone == "resnet18":
+            self.backbone = torchvision.models.resnet18(zero_init_residual=True)
+            self.backbone.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+            self.backbone.fc = torch.nn.Identity()
+            if args.final_pooling_type == "Max":
+                self.backbone.avgpool = torch.nn.AdaptiveMaxPool2d((1,1))
+            # projector
+            self.projector = nn.Sequential(nn.Dropout(0.5),
+                                        nn.Linear(512, 8192, bias=False),
+                                        nn.BatchNorm1d(8192),
+                                        nn.ReLU(),
+                                        nn.Linear(8192, 8192, bias = False))
+        elif args.backbone == "resnet34":
+            self.backbone = torchvision.models.resnet34(zero_init_residual=True)
+            self.backbone.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+            self.backbone.fc = torch.nn.Identity()
+            if args.final_pooling_type == "Max":
+                self.backbone.avgpool = torch.nn.AdaptiveMaxPool2d((1,1))
+            self.projector = nn.Sequential(nn.Dropout(0.5),
+                                        nn.Linear(512, 8192, bias=False),
+                                        nn.BatchNorm1d(8192),
+                                        nn.ReLU(),
+                                        nn.Linear(8192, 8192, bias = False))
+        elif args.backbone == "resnet50":
+            self.backbone = torchvision.models.resnet50(zero_init_residual=True)
+            self.backbone.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+            self.backbone.fc = torch.nn.Identity()
+            if args.final_pooling_type == "Max":
+                self.backbone.avgpool = torch.nn.AdaptiveMaxPool2d((1,1))
+            # projector
+            self.projector = nn.Sequential(nn.Dropout(0.5),
+                                            nn.Linear(2048, 8192, bias=False),
+                                            nn.BatchNorm1d(8192),
+                                            nn.ReLU(),
+                                            nn.Linear(8192, 8192, bias = False))
+        else:
+            raise NotImplementedError
         
         # normalization layer for the representations z1 and z2
         self.bn = nn.BatchNorm1d(8192, affine=False)
@@ -75,8 +111,12 @@ class BarlowTwins(nn.Module):
         z1 = self.backbone(y1)
         z2 = self.backbone(y2) # BS , 1280 ,1 ,1
 
-        z1_flat=z1.flatten(start_dim=1)   # BS x ddim
-        z2_flat=z2.flatten(start_dim=1)   # BS x ddim
+        if self.args.backbone == "efficientnet":
+            z1_flat=z1.flatten(start_dim=1)   # BS x ddim
+            z2_flat=z2.flatten(start_dim=1)   # BS x ddim
+        else :
+            z1_flat = z1
+            z2_flat = z2
         
         z1_normalised = self.bn(self.projector(z1_flat))
         z2_normalised = self.bn(self.projector(z2_flat))

@@ -8,65 +8,90 @@ from torch import nn
 import sys
 from datasets.data_utils import collate_fn_padd_downstream
 from datasets.dataset import get_dataset
+from collections import OrderedDict
 from efficientnet.model import  DownstreamClassifer
 from utils import (AverageMeter,Metric,freeze_effnet,get_downstream_parser,load_pretrain)#resume_from_checkpoint, save_to_checkpoint,set_seed
+import socketserver
 
 import wandb
 # wandb.login()
 os.environ["WANDB_API_KEY"] = "52cfe23f2dcf3b889f99716f771f81c71fd75320"
 os.environ["WANDB_MODE"] = "offline"
+wandb.define_metric("test_loss", summary="min")
+wandb.define_metric("test_accuracy", summary="max")
+wandb.define_metric("train_loss", summary="min")
+wandb.define_metric("train_accuracy", summary="max")
 
 def main_worker(gpu, args):
     args.rank += gpu
     args.ngpus = os.environ["CUDA_VISIBLE_DEVICES"]
     if args.rank==0:
-        run = wandb.init(project="tut urban",config=vars(args),
-            name="_".join([args.down_stream_task,args.backbone,args.final_pooling_type]))
+        if args.freeze_effnet :
+            extra_name = "freeze"
+        else:
+            extra_name = "finetune"
+        run = wandb.init(project="downstream2",config=vars(args),
+            name="_".join([args.backbone,args.final_pooling_type,args.tag,extra_name]))
+    print("wandb init done")
     torch.distributed.init_process_group(
         backend='nccl', init_method=args.dist_url,
         world_size=args.world_size, rank=args.rank)
+    print("process inited done")
     stats_file=None
     args.exp_root = args.exp_dir / args.tag
     args.exp_root.mkdir(parents=True, exist_ok=True)
-    if args.rank == 0:
-        # args.exp_root = args.exp_dir / args.tag
-        # args.exp_root.mkdir(parents=True, exist_ok=True)
-        stats_file = open(args.exp_root / 'downstream_stats.txt', 'a', buffering=1)
-        print(' '.join(sys.argv))
-        print(' '.join(sys.argv), file=stats_file)
 
     torch.cuda.set_device(gpu)
     torch.backends.cudnn.benchmark = True # ! change it set seed 
-
+    print("process inited done")
     # train and test loaders 
     # ! user sampler and ddp 
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
 
     train_dataset,test_dataset = get_dataset(args.down_stream_task)
+    print("model done1")
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)    
+    print("model done2")
     train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=per_device_batch_size,
                                                 collate_fn = collate_fn_padd_downstream,
                                                 pin_memory=True,sampler = train_sampler)
+    print("model done3")
     test_loader = torch.utils.data.DataLoader(test_dataset,batch_size=per_device_batch_size,
                                                 collate_fn = collate_fn_padd_downstream,
                                                 pin_memory=True)  
-
+    print("model done4")
     # models
     args.no_of_classes= train_dataset.no_of_classes
-    model = DownstreamClassifer(args).cuda(gpu)
-    
+    model = DownstreamClassifer(args)
+    print("model done5")
     # Resume
     start_epoch =0 
     if args.resume:
         raise NotImplementedError
         # resume_from_checkpoint(args.pretrain_path,model,optimizer)
     elif args.pretrain_path:
-        load_pretrain(args.pretrain_path,model,args.load_only_efficientNet,args.freeze_effnet)
+        print("here",args.pretrain_path,args.load_only_efficientNet)
+        # load_pretrain(args.pretrain_path,model,args.load_only_efficientNet)
+        checkpoint = torch.load(args.pretrain_path,map_location=torch.device('cpu'))
+        print("here")
+        new_state_dict = OrderedDict()
+        for k, v in checkpoint['model'].items():
+            name = k[7:] # remove `module.`
+            new_state_dict[name] = v
+        for key in new_state_dict.copy():
+            if not key.startswith('backbone'):
+                del new_state_dict[key]
+        mod_missing_keys,mod_unexpected_keys   = model.load_state_dict(new_state_dict,strict=False)
+        assert mod_missing_keys == ['classifier.weight', 'classifier.bias'] and mod_unexpected_keys == []
     # Freeze effnet
     if args.freeze_effnet:
-        freeze_effnet(model)
-
+        print("freezing backbone weights")
+        for param in model.backbone.parameters():
+            param.requires_grad = False
+    
+    print("laodin done")
+    model = model.cuda(gpu)
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model) 
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     criterion = nn.CrossEntropyLoss().cuda(gpu)
@@ -74,13 +99,11 @@ def main_worker(gpu, args):
         filter(lambda x: x.requires_grad, model.parameters()),
         lr=args.lr,
     )
-
+    print("syncbn done")
     if args.rank == 0:
         print("Starting To Train")
         wandb.watch(model,criterion=criterion, log="all", log_freq=10)
-
-    # if args.rank == 0 :
-    #         eval(0,model,test_loader,criterion,args,gpu,stats_file)
+    print("want done")
 
     for epoch in range(start_epoch,args.epochs):
         train_sampler.set_epoch(epoch)
@@ -97,8 +120,6 @@ def train_one_epoch(loader, model, crit, opt, epoch,gpu,args):
     '''
     Train one Epoch
     '''
-    logger = logging.getLogger(__name__)
-    logger.debug("epoch:"+str(epoch) +" Started")
     batch_time = AverageMeter()
     losses = AverageMeter()
     data_time = AverageMeter()
@@ -158,8 +179,11 @@ def main():
     args.ngpus_per_node = torch.cuda.device_count()
     
     # single-node distributed training
+    with socketserver.TCPServer(("localhost", 0), None) as s:
+        free_port = s.server_address[1]
     args.rank = 0
-    args.dist_url = 'tcp://localhost:58362'
+    args.dist_url = 'tcp://localhost:'+str(free_port)
+    print(args.dist_url)
     args.world_size = args.ngpus_per_node
     torch.multiprocessing.spawn(main_worker, (args,), args.ngpus_per_node)
 
