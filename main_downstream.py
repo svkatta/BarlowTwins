@@ -84,22 +84,33 @@ def main_worker(gpu, args):
                 del new_state_dict[key]
         mod_missing_keys,mod_unexpected_keys   = model.load_state_dict(new_state_dict,strict=False)
         assert mod_missing_keys == ['classifier.weight', 'classifier.bias'] and mod_unexpected_keys == []
-    # Freeze effnet
-    if args.freeze_effnet:
-        print("freezing backbone weights")
-        for param in model.backbone.parameters():
-            param.requires_grad = False
     
     print("laodin done")
     model = model.cuda(gpu)
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model) 
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     criterion = nn.CrossEntropyLoss().cuda(gpu)
-    optimizer = torch.optim.Adam(
-        filter(lambda x: x.requires_grad, model.parameters()),
-        lr=args.lr,
-    )
+# -------------------------------optmiser------------- 
+    classifier_parameters, model_parameters = [], []
+    for name, param in model.named_parameters():
+        if name in {'classifier.weight', 'classifier.bias'}:
+            classifier_parameters.append(param)
+        else:
+            model_parameters.append(param)
+    param_groups = [dict(params=classifier_parameters, lr=args.lr_classifier)]
+    if not args.freeze_effnet:
+        print("freezing backbone weights")
+        param_groups.append(dict(params=model_parameters, lr=args.lr_backbone))
+    
+    optimizer = torch.optim.SGD(param_groups, 0, momentum=0.9, weight_decay=args.weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
+
+    # optimizer = torch.optim.Adam(
+    #     filter(lambda x: x.requires_grad, model.parameters()),
+    #     lr=args.lr,
+    # )
     print("syncbn done")
+# -----------------------------------------
     if args.rank == 0:
         print("Starting To Train")
         wandb.watch(model,criterion=criterion, log="all", log_freq=10)
@@ -112,6 +123,9 @@ def main_worker(gpu, args):
 
         if args.rank == 0 :
             eval(epoch,model,test_loader,criterion,args,gpu,stats_file)
+
+        scheduler.step() # ! per epoch scheduler step 
+
     if args.rank==0:
         run.finish()
 
